@@ -1,67 +1,66 @@
-import random
-import math
-import inflect
+"""Educational Miller–Rabin primality checks and probable-prime generation."""
+from __future__ import annotations
 
-p = inflect.engine()
+import argparse
+import secrets
 
-def is_prime(n, k=3):  # Reduced the number of Miller-Rabin tests for speed
-    if n <= 1:
+_SMALL_PRIMES = (2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37)
+
+
+def is_probable_prime(number: int, rounds: int = 24) -> bool:
+    """Return whether number passes the specified Miller–Rabin rounds."""
+    if rounds < 1:
+        raise ValueError("rounds must be positive")
+    if number < 2:
         return False
-    if n <= 3:
-        return True
+    for prime in _SMALL_PRIMES:
+        if number == prime:
+            return True
+        if number % prime == 0:
+            return False
 
-    r, d = 0, n - 1
+    d = number - 1
+    s = 0
     while d % 2 == 0:
-        r += 1
         d //= 2
+        s += 1
 
-    def witness(a, d, n):
-        x = pow(a, d, n)
-        if x == 1 or x == n - 1:
+    for _ in range(rounds):
+        base = secrets.randbelow(number - 3) + 2
+        x = pow(base, d, number)
+        if x in (1, number - 1):
+            continue
+        for _ in range(s - 1):
+            x = pow(x, 2, number)
+            if x == number - 1:
+                break
+        else:
             return False
-        for _ in range(r - 1):
-            x = pow(x, 2, n)
-            if x == n - 1:
-                return False
-        return True
-
-    for _ in range(k):
-        a = random.randint(2, n - 2)
-        if witness(a, d, n):
-            return False
-
     return True
 
-def find_large_prime(bits):
+
+def generate_probable_prime(bits: int, rounds: int = 24) -> int:
+    """Generate an odd probable prime with exactly bits bits."""
+    if bits < 2:
+        raise ValueError("bits must be at least 2")
+    if rounds < 1:
+        raise ValueError("rounds must be positive")
     while True:
-        candidate = random.getrandbits(bits)
-        if is_prime(candidate):
+        candidate = secrets.randbits(bits) | (1 << (bits - 1)) | 1
+        if is_probable_prime(candidate, rounds):
             return candidate
 
-bits = 20
-prime = find_large_prime(bits)
-prime_str = str(prime)
-num_digits = len(prime_str)
 
-magnitude = "Unknown"
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--bits", type=int, default=32)
+    parser.add_argument("--rounds", type=int, default=24)
+    args = parser.parse_args()
+    prime = generate_probable_prime(args.bits, args.rounds)
+    print(f"Probable {args.bits}-bit prime: {prime}")
+    print(f"Bit length: {prime.bit_length()}")
+    print(f"Miller–Rabin rounds: {args.rounds}")
 
-# Determine magnitude and set magnitude string accordingly
-if num_digits >= 12:
-    magnitude = "Trillion"
-elif num_digits >= 9:
-    magnitude = "Billion"
-elif num_digits >= 6:
-    magnitude = "Million"
-elif num_digits >= 3:
-    magnitude = "Thousand"
 
-# Convert single-digit numbers to words
-if num_digits == 1:
-    magnitude = p.number_to_words(num_digits * 10)
-
-prime_in_words = p.number_to_words(prime)  # Using inflect for converting to words
-
-print(f"A randomly generated {bits}-bit prime number:")
-print(f"Prime Number: {prime}")
-print(f"Number of digits: {num_digits}")
-print(f"In words, it's approximately {prime_in_words} {magnitude}.")
+if __name__ == "__main__":
+    main()
